@@ -1,4 +1,49 @@
-.env
-db.sqlite3
+
 main/
 tests/
+
+# Python-specific files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.swp
+*.swo
+
+# Virtual environment
+venv/
+.env/
+*.env
+
+# Django-specific files
+db.sqlite3
+/media/
+*.log
+*.pot
+*.mo
+
+# Static files
+/static/
+*.pyc
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+
+# Testing and debugging files
+.tox/
+noxfile
+.cache/
+pytest_cache/
+

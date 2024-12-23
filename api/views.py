@@ -1,21 +1,20 @@
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from .db_utils import (companies, projects, departments, suppliers, items, payment_processing)
 from .serializers import CompanySerializer, VoucherRequestSerializer
 
+class ProtectedView(APIView):
+    permission_classes = [IsAuthenticated]
 
-# from .db_utils.companies import fetch_all_companies, fetch_company_by_id
-# from .db_utils.projects import fetch_all_projects, fetch_project_by_id
-# from .db_utils.departments import fetch_all_departments, fetch_department_by_id
-# from .db_utils.suppliers import fetch_all_suppliers, fetch_supplier_by_id
-# from .db_utils.items import fetch_all_items, fetch_item_by_id
-# from .db_utils.payment_processing import add_voucher_request, fetch_voucher_request_by_id, delete_voucher_request_by_id
-
+    def get(self, request):
+        return Response({"message": "This is a protected view!"})
+    
 class CompanyListView(APIView):
     def get(self, request):
-        companies = companies.fetch_all_companies()
-        return Response(companies)
+        companiesList = companies.fetch_all_companies()
+        return Response(companiesList)
     
 class CompanyDetailView(APIView):
     def get(self, request, company_code):
