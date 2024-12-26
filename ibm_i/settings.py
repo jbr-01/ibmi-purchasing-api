@@ -130,6 +130,9 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+default_throttle_rates_user = os.getenv("DEFAULT_THROTTLE_RATES_USER")
+default_throttle_rates_anon = os.getenv("DEFAULT_THROTTLE_RATES_ANON")
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -137,11 +140,22 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.AnonRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'user': f'{default_throttle_rates_user}/minute',  # requests per minute for authenticated users
+        'anon': f'{default_throttle_rates_anon}/minute',  # requests per minute for anonymous users
+    }
 }
 
+access_token_lifetime = int(os.getenv("ACCESS_TOKEN_LIFETIME"))
+refresh_token_lifetime = int(os.getenv("REFRESH_TOKEN_LIFETIME"))
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=access_token_lifetime),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=refresh_token_lifetime),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
 }
