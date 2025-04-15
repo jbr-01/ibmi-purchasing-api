@@ -17,7 +17,6 @@ def get_connection():
 def fetch_all_departments():
     conn = get_connection()
     query = base_query
-    print(query)
     stmt = ibm_db.exec_immediate(conn, query)
     departments = []
     row = ibm_db.fetch_assoc(stmt)

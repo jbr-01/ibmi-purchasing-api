@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (CompanyListView, CompanyDetailView, ProjectListView, ProjectDetailView, 
     DepartmentListView, DepartmentDetailView, SupplierListView, SupplierDetailView,
-    ItemListView, ItemDetailView, VoucherRequestListView, VoucherRequestDetailView)
+    ItemListView, ItemDetailView, VoucherRequestDetailView)
 
 urlpatterns = [
     path('companies/', CompanyListView.as_view(), name='company-list'),
@@ -13,7 +13,8 @@ urlpatterns = [
     path('suppliers/', SupplierListView.as_view(), name='suppliers-list'),
     path('suppliers/<str:supplier_code>/', SupplierDetailView.as_view(), name='supplier-detail'),
     path('items/', ItemListView.as_view(), name='items-list'),
-    path('items/<str:item_code>/', ItemDetailView.as_view(), name='item-detail'),
-    path('payment_processing/voucher_request/', VoucherRequestListView.as_view(), name='voucher-request-list'),
+    path('items/<str:account_code>/', ItemDetailView.as_view(), name='item-detail'),
+    # path('payment_processing/voucher_request/', VoucherRequestListView.as_view(), name='voucher-request-list'),
     path('payment_processing/voucher_request/<str:voucher_request_no>/', VoucherRequestDetailView.as_view(), name='voucher-request-detail'),
+    path('payment_processing/voucher_request/', VoucherRequestDetailView.as_view(), name='voucher-request-create'),
 ]

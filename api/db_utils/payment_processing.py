@@ -1,45 +1,23 @@
-
 import ibm_db
 from decimal import Decimal
 from django.conf import settings
 
 schema = settings.IBM_SCHEMA
 debug = settings.DEBUG
-# addl_query = "WHERE TFERDT BETWEEN 20240101 AND 20241231" if debug else "" # TEMPORARY ONLY! REMOVE THIS EVENTUALLY.
-
-base_query = f"""
-    SELECT 
-        VREQNO voucher_request_no,
-        CODE, DATA,
-        TFERDT date_transferred,
-        TFERTM time_transferred,
-        REFNUM reference_no,
-        DATDEL date_deleted
-    FROM {schema}.VREQPF"""
 
 # Create a connection
 def get_connection():
     return ibm_db.connect(settings.IBM_DB_NAME, settings.IBM_USERNAME, settings.IBM_PASSWORD)
 
-# def fetch_all_voucher_requests():
-#     conn = get_connection()
-#     query = f"""{base_query} {addl_query}"""
-#     print(query)
-#     stmt = ibm_db.exec_immediate(conn, query)
-#     voucher_requests = []
-#     row = ibm_db.fetch_assoc(stmt)
-#     while row:
-#         voucher_requests.append(row)
-#         row = ibm_db.fetch_assoc(stmt)
-    
-#     ibm_db.close(conn)
-#     return voucher_requests
-
 def fetch_voucher_request_by_id(voucher_request_no):
     try:
         conn = get_connection()
-        query = f"""
-            {base_query} WHERE VREQNO = ?"""
+        query = f""" 
+            SELECT
+                VREQNO VOUCHER_REQUEST_NO,
+                VRDTL VOUCHER_REQUEST_DETAIL,
+                TRIM(VRSTAT) VOUCHER_REQUEST_STATUS
+            FROM {schema}.VFL_API WHERE VREQNO = ?"""
         stmt = ibm_db.prepare(conn, query)
         ibm_db.bind_param(stmt, 1, voucher_request_no)
         ibm_db.execute(stmt)
@@ -54,9 +32,10 @@ def fetch_voucher_request_by_id(voucher_request_no):
             "data": voucher_requests
         }
             
-    except ibm_db.IbmDbError as e:
+    except Exception as e:
         return {
             "status": "error",
+            "error": "SQL_ERROR",
             "message": f"Database error occurred: {e}",
             "data": None
         }
@@ -65,142 +44,155 @@ def fetch_voucher_request_by_id(voucher_request_no):
         # Safely close the connection
         if 'conn' in locals() and conn:
             ibm_db.close(conn)
-            print("Database connection closed.")
+            # print("Database connection closed.")
 
 def format_with_commas(number):
     # Use Python's string formatting with commas and two decimal places
     return f"{number:,.2f}"
 
 def add_voucher_request(data_list):
-    
-    voucher_request_no = data_list['voucher_request_no']
-    reference_no = data_list['reference_no']
-    header = data_list['header']
-    detail = data_list['detail']
-    particulars = data_list['particulars']
-    particulars_total_amount = Decimal(data_list['particulars_total_amount'])
-    
-    i_code = []
-    i_data = []
-    
-    # Setup Header
-    
-    # Remove the decimal point
-    total_amount = Decimal(header['total_amount'])
-    number_without_decimal = int(total_amount * 100)  # Multiply by 100 to shift two decimal places and convert to integer
-
-    # Format with leading zeros
-    header_total_amount = f"{number_without_decimal:012}"  # Pad to 12 digits with leading zeros
-    
-    i_code.append(1)
-    i_data.append(f"""{int(header['company_code']):02}{header['branch']}{header['date_prepared']}{header['supplier_code']}{header['supplier_name']}{header_total_amount}{header['project_code']}{header['voucher_type']}""")
-    
-    # Setup Detail
-    dtl_row = 1
-    for dtl in detail: 
-        amount = Decimal(dtl['amount'])
-        number_no_dec = int(amount * 100)
-        dtl_formatted_amt = f"{number_no_dec:013}" 
-        i_code.append(2)
-        i_data.append(f"""{dtl_row:03}{dtl['account_code']}{dtl_formatted_amt}""")
-        dtl_row += 1
-        
-    # Setup Particulars
-    particular_row = 1
-    for particular in particulars: 
-        if particular_row == 1:
-            i_code.append(3)
-            i_data.append(f"""{particular_row:03} Qty. Unit Description Amount""")
-            particular_row += 1
-        
-        i_code.append(3)
-        i_data.append(f"""{particular_row:03} {particular['quantity']} {particular['item_description']} {format_with_commas(Decimal(particular['amount']))}""")
-        
-        particular_row += 1
-        
-        if particular_row > len(particulars) + 1: # '+ 1' is for Particular Header count
-             i_code.append(3)
-             i_data.append(f"""{particular_row:03} ____________""")
-             i_code.append(3)
-             i_data.append(f"""{(particular_row + 1):03} {format_with_commas(particulars_total_amount)}""")
-             
     try:
-        voucher_exists = fetch_voucher_request_by_id(voucher_request_no)
-        if len(voucher_exists["data"]) > 0:
-            return {
-                "status": "error",
-                "message": "Voucher Request No. already exists.",
-                "data": {
-                    "voucher_request_no": voucher_request_no,
-                }
-            }
-            
-    except ibm_db.IbmDbError as e:
-        return {
-            "status": "error",
-            "message": f"Database error occurred: {e}",
-            "data": None
-        }
-        
-    try:
+        voucher_type = 'C' # TODO: FIGURE OUT LOGIC FOR 'C' 
         conn = get_connection()
-        query = (f"""
-            INSERT INTO {schema}.VREQPF (VREQNO, CODE, DATA, TFERDT, TFERTM, REFNUM, DATDEL) VALUES
-                {', '.join(['(?, ?, ?, INT(current_date), INT(current_time), ?, 0)' for _ in i_data])}
-            WITH NONE""")
-        
+        query = f"""
+            INSERT INTO {schema}.VFL1PF VALUES (
+            ?, ?, ?, ?, 0, 0, 0, '', 0, 0, 0, 0, ?,
+            ?, '', ?, 0, 0, 0, 0, 0, '', 0, '', '', 0) 
+            WITH NONE
+        """
         stmt = ibm_db.prepare(conn, query)
-
-        # Bind parameters for all rows
-        param_index = 1
-        row_index = 0
-        for row in i_data:
-            ibm_db.bind_param(stmt, param_index, voucher_request_no)
-            ibm_db.bind_param(stmt, param_index + 1, i_code[row_index])
-            ibm_db.bind_param(stmt, param_index + 2, row)
-            ibm_db.bind_param(stmt, param_index + 3, reference_no)
-            param_index += 4
-            row_index += 1
-
-        # Execute the statement
-        success = ibm_db.execute(stmt)
-
-        if success:
-            num_rows = ibm_db.num_rows(stmt)
-            return {
-                "status": "success",
-                "message": "Record added successfully.",
-                "data": {
-                    "rows_inserted": num_rows,
-                    "data_inserted": data_list,
-                }
-            }
-        else:
-            return {
-                "status": "error",
-                "message": f"Database error occurred: {e}",
-                "data": None
-            }
         
-    except ibm_db.IbmDbError as e:
+        voucher = data_list
+        supplier = voucher["supplier"]
+        
+        ibm_db.bind_param(stmt, 1, voucher["voucher_request_no"])
+        ibm_db.bind_param(stmt, 2, voucher_type)
+        ibm_db.bind_param(stmt, 3, voucher["company_code"])
+        ibm_db.bind_param(stmt, 4, voucher["branch_code"])
+        ibm_db.bind_param(stmt, 5, supplier["code"])
+        ibm_db.bind_param(stmt, 6, supplier["name"])
+        ibm_db.bind_param(stmt, 7, Decimal(voucher["total_amount"]))
+        
+        ibm_db.execute(stmt)
+        
+        # Insert lines
+        par_ctr = 1
+        for line in voucher["lines"]:
+            line_no = voucher["lines"].index(line) + 1
+            
+            if line_no == 1:
+                # Insert 1st row in particulars file
+                line_query = f"""
+                    INSERT INTO {schema}.VPARPF VALUES 
+                        (?, ?, ?, ?, 0, 0, 0, '', 0, ?, 'Qty. Unit Description Amount')
+                    WITH NONE"""
+                line_stmt = ibm_db.prepare(conn, line_query)
+                ibm_db.bind_param(line_stmt, 1, voucher["voucher_request_no"])
+                ibm_db.bind_param(line_stmt, 2, voucher_type)
+                ibm_db.bind_param(line_stmt, 3, voucher["company_code"])
+                ibm_db.bind_param(line_stmt, 4, voucher["branch_code"])
+                ibm_db.bind_param(line_stmt, 5, par_ctr)
+                ibm_db.execute(line_stmt)
+            
+            # Insert items
+            for item in line["items"]:
+                item_query = f"""
+                    INSERT INTO {schema}.VFL2PF VALUES 
+                        (?, ?, ?, ?, 0, 0, 0, '', 0, ?, ?, ?, 0,
+                        0, '', '', 0, '', 0) 
+                    WITH NONE"""
+                item_stmt = ibm_db.prepare(conn, item_query)
+                ibm_db.bind_param(item_stmt, 1, voucher["voucher_request_no"])
+                ibm_db.bind_param(item_stmt, 2, voucher_type)
+                ibm_db.bind_param(item_stmt, 3, voucher["company_code"])
+                ibm_db.bind_param(item_stmt, 4, voucher["branch_code"])
+                ibm_db.bind_param(item_stmt, 5, line_no)
+                ibm_db.bind_param(item_stmt, 6, line["account_code"])
+                ibm_db.bind_param(item_stmt, 7, Decimal(item["amount"]))
+                ibm_db.execute(item_stmt)
+                
+                # Insert items as succeeding rows in particulars file
+                par_ctr += 1
+                line_query = f"""
+                    INSERT INTO {schema}.VPARPF VALUES 
+                        (?, ?, ?, ?, 0, 0, 0, '', 0, ?, ?)
+                    WITH NONE"""
+                line_stmt = ibm_db.prepare(conn, line_query)
+                ibm_db.bind_param(line_stmt, 1, voucher["voucher_request_no"])
+                ibm_db.bind_param(line_stmt, 2, voucher_type)
+                ibm_db.bind_param(line_stmt, 3, voucher["company_code"])
+                ibm_db.bind_param(line_stmt, 4, voucher["branch_code"])
+                ibm_db.bind_param(line_stmt, 5, par_ctr)
+                particular = f"""{item["quantity"]} {item["unit"]} {item["description"][:16]} {format_with_commas(Decimal(item["amount"]))}"""
+                ibm_db.bind_param(line_stmt, 6, particular)
+                ibm_db.execute(line_stmt)
+            
+        # Insert 'Totals' rows in particulars file
+        par_ctr += 1
+        line_query = f"""
+            INSERT INTO {schema}.VPARPF VALUES 
+                (?, ?, ?, ?, 0, 0, 0, '', 0, ?, ?),
+                (?, ?, ?, ?, 0, 0, 0, '', 0, ?, ?)
+            WITH NONE"""
+        line_stmt = ibm_db.prepare(conn, line_query)
+        ibm_db.bind_param(line_stmt, 1, voucher["voucher_request_no"])
+        ibm_db.bind_param(line_stmt, 2, voucher_type)
+        ibm_db.bind_param(line_stmt, 3, voucher["company_code"])
+        ibm_db.bind_param(line_stmt, 4, voucher["branch_code"])
+        ibm_db.bind_param(line_stmt, 5, par_ctr)
+        ibm_db.bind_param(line_stmt, 6, '____________')
+        ibm_db.bind_param(line_stmt, 7, voucher["voucher_request_no"])
+        ibm_db.bind_param(line_stmt, 8, voucher_type)
+        ibm_db.bind_param(line_stmt, 9, voucher["company_code"])
+        ibm_db.bind_param(line_stmt, 10, voucher["branch_code"])
+        ibm_db.bind_param(line_stmt, 11, par_ctr + 1)
+        ibm_db.bind_param(line_stmt, 12, format_with_commas(Decimal(voucher["total_amount"])))
+        ibm_db.execute(line_stmt)
+        
+        # Insert into VR API Details file 
+        api_query = f"""INSERT INTO {schema}.VFL_API VALUES (?, ?, '') WITH NONE"""
+        api_stmt = ibm_db.prepare(conn, api_query)
+        ibm_db.bind_param(api_stmt, 1, voucher["voucher_request_no"])
+        ibm_db.bind_param(api_stmt, 2, str(data_list))
+        ibm_db.execute(api_stmt)
+        
+        # Insert into logs file
+        log_query = f"""
+            INSERT INTO {schema}.ITLOGPF VALUES (
+                ?, INT(CURRENT_DATE), INT(CURRENT_TIME), 'VFL_API', 'ADD',
+                ?, 'RECORD ADDED FROM PRS WEB APP', 'THRU IBM i API'
+            ) WITH NONE"""
+        log_stmt = ibm_db.prepare(conn, log_query)
+        ibm_db.bind_param(log_stmt, 1, voucher["prs_username"])
+        ibm_db.bind_param(log_stmt, 2, voucher["voucher_request_no"])
+        ibm_db.execute(log_stmt)
+        
+        return {
+            "status": "success",
+            "message": "Voucher request added successfully.",
+            "data": str(data_list)
+        }
+
+    except Exception as e:
         return {
             "status": "error",
+            "error": "SQL_ERROR",
             "message": f"Database error occurred: {e}",
-            "data": None
+            "data": { "voucher_request_no": voucher["voucher_request_no"]}
         }
-        
+
     finally:
-        # Safely close the connection
         if 'conn' in locals() and conn:
             ibm_db.close(conn)
-            print("Database connection closed.")
+            # print("Database connection closed.")
 
-def delete_voucher_request_by_id(voucher_request_no):
+
+def cancel_voucher_request_by_id(voucher_request_no):
     try:
         conn = get_connection()
         query = f"""
-            UPDATE {schema}.vreqpf
-            SET DATDEL = INT(current_date)
+            UPDATE {schema}.VFL_API
+            SET VRSTAT = 'CANCELLED'
             WHERE VREQNO = ?
             WITH NONE"""
         
@@ -212,38 +204,35 @@ def delete_voucher_request_by_id(voucher_request_no):
             if rows_affected > 0:
                 return {
                     "status": "success",
-                    "message": "Record deleted successfully.",
-                    "data": {
-                        "rows_updated": rows_affected
-                    }
+                    "message": "Voucher request CANCELLED successfully.",
+                    "data": { "voucher_request_no": voucher_request_no }
                 }
             else:
                 return {
-                    "status": "success",
-                    "message": "No records were deleted. The condition did not match any rows.",
-                    "data": {
-                        "rows_updated": rows_affected
-                    }
+                    "status": "error",
+                    "error": "NOT_FOUND",
+                    "message": "No records were cancelled. The condition did not match any rows.",
+                    "data": { "voucher_request_no": voucher_request_no }
                 }
                 
         return {
             "status": "error",
+            "error": "VALIDATION_ERROR",
             "message": "Invalid input provided.",
-            "data": None,
+            "data": { "voucher_request_no": voucher_request_no },
         }
-        
-        # ibm_db.close(conn)
     
-    except ibm_db.IbmDbError as e:
+    except Exception as e:
         return {
             "status": "error",
+            "error": "SQL_ERROR",
             "message": f"Database error occurred: {e}",
-            "data": None
+            "data": { "voucher_request_no": voucher_request_no },
         }
         
     finally:
         # Safely close the connection
         if 'conn' in locals() and conn:
             ibm_db.close(conn)
-            print("Database connection closed.")
+            # print("Database connection closed.")
         

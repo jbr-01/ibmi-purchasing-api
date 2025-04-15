@@ -1,94 +1,86 @@
-from datetime import datetime
+
 from rest_framework import serializers
-from .models import (Company, VoucherRequest, VoucherRequestHeader,
-    VoucherRequestDetail, VoucherRequestParticular)
+from .models import (Company, Project, Departments, Suppliers, Items, 
+    VoucherRequestGet, VoucherSupplier, Voucher, VoucherLine, VoucherItem)
 
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
         fields = ['company_code']
-    
-    def validate_company_code(self, value):
-        print('value => ', value)
-        if (value > 99):
-            raise serializers.ValidationError("Company code must be an integer between 1 and 99.")
-        return value
 
-# class CompanySerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Company
-#         fields = ['company_code']
+class ProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = ['project_code']
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Departments
+        fields = ['department_code']
+
+class SuppliersSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Suppliers
+        fields = ['supplier_code']
         
-#     # Custom validation for the company_code
-#     def validate_company_code(self, value):
-#         if value <= 0:
-#             raise serializers.ValidationError("Company code must be a positive integer.")
-#         return value
-        # fields = '__all__'
-        # read_only_fields = '__all__'  # Set read-only fields
+class ItemsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Items
+        fields = ['account_code']
         
-class VoucherRequestHeaderSerializer(serializers.ModelSerializer):
-    date_prepared = serializers.CharField()  # Override the field to handle yyyymmdd format
-
+class VoucherRequestGetSerializer(serializers.ModelSerializer):
     class Meta:
-        model = VoucherRequestHeader
-        exclude = ['voucher_request']  # Exclude voucher_request; it will be set automatically
-        # fields = '__all__'
-
-    def validate_date_prepared(self, value):
-        # Validate and convert yyyymmdd to date
-        try:
-            return datetime.strptime(value, "%Y%m%d").date()
-        except ValueError:
-            raise serializers.ValidationError("Date must be in yyyymmdd format.")
-
-    def to_representation(self, instance):
-        # Convert date to yyyymmdd when serializing
-        representation = super().to_representation(instance)
-        if instance.date_prepared:
-            representation['date_prepared'] = instance.date_prepared.strftime("%Y%m%d")
-        return representation
-
-class VoucherRequestDetailSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = VoucherRequestDetail
-        exclude = ['voucher_request']
-        # fields = '__all__'
-
-
-class VoucherRequestParticularSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = VoucherRequestParticular
-        exclude = ['voucher_request']
-        # fields = '__all__'
+        model = VoucherRequestGet
+        fields = ['voucher_request_no']
         
-class VoucherRequestSerializer(serializers.ModelSerializer):
-
-    header = VoucherRequestHeaderSerializer()
-    detail = VoucherRequestDetailSerializer(many=True)
-    particulars = VoucherRequestParticularSerializer(many=True)
-    
+class VoucherItemSerializer(serializers.ModelSerializer):
     class Meta:
-        model = VoucherRequest
-        fields = ['voucher_request_no', 'reference_no', 'header', 'detail', 'particulars', 'particulars_total_amount']
+        model = VoucherItem
+        fields = ['quantity', 'unit', 'description', 'amount']
+
+class VoucherLineSerializer(serializers.ModelSerializer):
+    items = VoucherItemSerializer(many=True)
+
+    class Meta:
+        model = VoucherLine
+        fields = ['account_code', 'amount', 'items']
+
+class VoucherSupplierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VoucherSupplier
+        fields = ['code', 'name', 'tin']
+
+class VoucherSerializer(serializers.ModelSerializer):
+    supplier = VoucherSupplierSerializer()
+    lines = VoucherLineSerializer(many=True)
+
+    class Meta:
+        model = Voucher
+        fields = [
+            'voucher_request_no',
+            'branch_code',
+            'company_code',
+            'date_prepared',
+            'time_prepared',
+            'supplier',
+            'total_amount',
+            'project_code',
+            'lines',
+            'prs_username'
+        ]
 
     def create(self, validated_data):
-        header_data = validated_data.pop('header')
-        detail_data = validated_data.pop('detail')
-        particulars_data = validated_data.pop('particulars')
+        supplier_data = validated_data.pop('supplier')
+        lines_data = validated_data.pop('lines')
 
-        # Create the parent VoucherRequest object
-        voucher_request = VoucherRequest.objects.create(**validated_data)
+        supplier, _ = VoucherSupplier.objects.get_or_create(**supplier_data)
+        voucher = Voucher.objects.create(supplier=supplier, **validated_data)
 
-        # Create related Header
-        VoucherRequestHeader.objects.create(voucher_request=voucher_request, **header_data)
-        
-        # Create related Details
-        for detail in detail_data:
-            VoucherRequestDetail.objects.create(voucher_request=voucher_request, **detail)
+        for line_data in lines_data:
+            items_data = line_data.pop('items')
+            line = VoucherLine.objects.create(voucher=voucher, **line_data)
+            for item_data in items_data:
+                VoucherItem.objects.create(line=line, **item_data)
 
-        # Create related Particulars
-        for particular in particulars_data:
-            VoucherRequestParticular.objects.create(voucher_request=voucher_request, **particular)
-
-        return voucher_request
+        return voucher
+    

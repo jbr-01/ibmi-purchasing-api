@@ -6,11 +6,9 @@ schema = settings.IBM_SCHEMA
 
 base_query = f"""
     SELECT 
-        ITEMCD item_code,
-        ITMDES item_description,
-        UNIT unit_of_measurement,
-        ACCTCD account_code
-    FROM {schema}.JITMPF """
+        DIGITS(MOTHER) || PROJCD || DIGITS(DEPTCD) || DIGITS(GENCD) || DIGITS(SUBCOD) account_code,
+        DESCAC item_description
+    FROM {schema}.GACTPF """
 
 # Create a connection
 def get_connection():
@@ -33,7 +31,7 @@ def fetch_all_items():
 def fetch_item_by_id(item_code):
     conn = get_connection()
     query = f"""
-        {base_query} WHERE ITEMCD = ?"""
+        {base_query} WHERE DIGITS(MOTHER) || PROJCD || DIGITS(DEPTCD) || DIGITS(GENCD) || DIGITS(SUBCOD) = ?"""
     print(query)
     stmt = ibm_db.prepare(conn, query)
     ibm_db.bind_param(stmt, 1, item_code)

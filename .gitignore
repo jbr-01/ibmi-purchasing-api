@@ -6,7 +6,7 @@ tests/
 *.pyc
 *.pyo
 *.pyd
-__pycache__/
+**/__pycache__/
 *.swp
 *.swo
 
