@@ -18,6 +18,12 @@ import os
 # Load environment variables from the .env file
 load_dotenv()
 
+# MAIN_HOST = os.getenv("DJANGO_HOST")
+# TEST_HOST = os.getenv("FORTINET_HOST")
+# ALLOWED_HOSTS = [MAIN_HOST, TEST_HOST]
+
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -30,10 +36,6 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
-MAIN_HOST = os.getenv("DJANGO_HOST")
-
-ALLOWED_HOSTS = [MAIN_HOST]
-
 
 # Application definition
 
